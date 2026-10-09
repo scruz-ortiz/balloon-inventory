@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#c2185b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Balloons">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Balloon Roll Inventory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one working column — alert strip, tabs, filterable stock list; a bottom sheet holds every action for one balloon. */
+:root{
+  --bg:#f6f4f8; --surface:#ffffff; --sunk:#eeeaf2; --line:#ddd6e4;
+  --ink:#22192b; --muted:#6c6177; --accent:#c2185b; --accent-ink:#ffffff; --accent-soft:#fbe4ee;
+  --ok:#1f7a4d; --ok-soft:#e1f3e9; --warn:#a85d00; --warn-soft:#fff0d9; --bad:#b3261e; --bad-soft:#fde4e1;
+  --shadow:0 1px 2px rgb(34 25 43 / .06),0 8px 24px rgb(34 25 43 / .08);
+  --display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --body:"Figtree","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#17121c; --surface:#211a28; --sunk:#2a2232; --line:#3a3044;
+  --ink:#f2edf6; --muted:#a99db5; --accent:#f06292; --accent-ink:#1a0f16; --accent-soft:#3d1b2c;
+  --ok:#6fd49c; --ok-soft:#173326; --warn:#f5b453; --warn-soft:#38270d; --bad:#ff8a80; --bad-soft:#3b1a19;
+  --shadow:0 1px 2px rgb(0 0 0 / .4),0 8px 24px rgb(0 0 0 / .35); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#17121c; --surface:#211a28; --sunk:#2a2232; --line:#3a3044;
+  --ink:#f2edf6; --muted:#a99db5; --accent:#f06292; --accent-ink:#1a0f16; --accent-soft:#3d1b2c;
+  --ok:#6fd49c; --ok-soft:#173326; --warn:#f5b453; --warn-soft:#38270d; --bad:#ff8a80; --bad-soft:#3b1a19;
+  --shadow:0 1px 2px rgb(0 0 0 / .4),0 8px 24px rgb(0 0 0 / .35); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;font-variant-numeric:tabular-nums}
+.wrap{max-width:880px;margin:0 auto;padding-inline:16px;padding-block:20px 80px;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+header.top h1{font-size:clamp(26px,5vw,34px);font-weight:800;letter-spacing:-.02em;line-height:1}
+header.top p{margin:6px 0 0;color:var(--muted);font-size:14px}
+.status{font-size:12px;color:var(--muted)}
+
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 14px;font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* alerts */
+.alerts{display:flex;flex-direction:column;gap:8px}
+.alert{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:12px;border:1px solid}
+.alert.make{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+.alert.order{background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
+.alert .tag{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;padding-top:2px}
+.alert.make .tag{color:var(--warn)} .alert.order .tag{color:var(--bad)}
+.alert .items{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.alert .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px 3px 6px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.alert-ok{color:var(--ok);background:var(--ok-soft);padding:10px 14px;border-radius:12px;font-size:14px;font-weight:500}
+
+/* tabs */
+.tabs{display:flex;gap:4px;background:var(--sunk);padding:4px;border-radius:12px;width:fit-content;max-width:100%;overflow-x:auto}
+.tabs button{border:0;background:transparent;padding:8px 14px;border-radius:9px;font-weight:600;font-size:14px;color:var(--muted);white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.tabs .count{font-size:12px;color:var(--accent);margin-left:4px}
+
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters input[type=search]{flex:1 1 180px;min-width:0}
+input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 11px;width:100%}
+.filters select{width:auto}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:8px 12px;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+/* stock list */
+.group-h{display:flex;align-items:baseline;justify-content:space-between;margin:6px 2px 8px}
+.group-h h2{font-size:18px;font-weight:700}
+.group-h span{font-size:12px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.list{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr) repeat(3,minmax(64px,auto));gap:14px;align-items:center;padding:12px 14px;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;width:100%}
+.row:first-child{border-top:0}
+.row:hover{background:var(--sunk)}
+.row .name{min-width:0}
+.row .name b{display:block;font-weight:600;font-size:15px;overflow-wrap:anywhere}
+.row .name small{color:var(--muted);font-size:12.5px;display:block;overflow-wrap:anywhere}
+.stat{text-align:right;line-height:1.15}
+.stat .n{font-family:var(--display);font-weight:700;font-size:20px}
+.stat .l{font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;display:block}
+.stat.zero .n{color:var(--muted);opacity:.6}
+.flag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:999px;padding:1px 7px;margin-left:6px;vertical-align:2px}
+.flag.make{background:var(--warn-soft);color:var(--warn)}
+.flag.order{background:var(--bad-soft);color:var(--bad)}
+.flag.ex{background:var(--sunk);color:var(--muted)}
+.flag.low{background:var(--accent-soft);color:var(--accent)}
+.alert.low{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.alert.low .tag,.hint.low{color:var(--accent)}
+.alert .chip .why{color:var(--muted);font-size:12px}
+@media (max-width:560px){
+  .row{grid-template-columns:auto minmax(0,1fr) repeat(3,auto);gap:10px;padding:12px}
+  .stat .n{font-size:17px}
+  .stat .l{font-size:9.5px}
+}
+
+/* swatches: a twisting balloon is a long tube, a decor balloon is a round with a knot */
+.sw{flex:none;display:inline-block;background:var(--c,#999);box-shadow:inset 0 -3px 4px rgb(0 0 0 / .18),inset 0 2px 3px rgb(255 255 255 / .35),0 0 0 1px rgb(0 0 0 / .12)}
+.sw.twist{width:34px;height:11px;border-radius:999px;transform:rotate(-24deg)}
+.sw.twist.s160{height:8px} .sw.twist.s360{height:14px}
+.sw.round{width:22px;height:25px;border-radius:50% 50% 48% 48%/55% 55% 45% 45%;position:relative}
+.sw.round::after{content:"";position:absolute;left:50%;bottom:-4px;width:6px;height:5px;margin-left:-3px;background:var(--c,#999);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.alert .chip .sw.twist{width:22px;height:8px}
+.alert .chip .sw.round{width:13px;height:15px}
+
+.empty{padding:28px 20px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:14px}
+.empty b{display:block;color:var(--ink);font-family:var(--display);font-size:18px;margin-bottom:4px}
+.banner{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:14px}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgb(10 5 15 / .45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.sheet{background:var(--surface);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:20px 18px calc(22px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:16px;box-shadow:var(--shadow)}
+@media (min-width:640px){.scrim{align-items:center}.sheet{border-radius:18px}}
+.sheet>*{flex-shrink:0}
+.sx-list{max-height:40vh}
+.sticky-actions{position:sticky;bottom:calc(-22px - env(safe-area-inset-bottom,0px));background:var(--surface);margin-inline:-18px;padding:12px 18px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
+.sheet-h{display:flex;gap:12px;align-items:center}
+.sheet-h h3{font-size:22px;font-weight:700;flex:1;min-width:0;overflow-wrap:anywhere}
+.sheet-h .x{border:0;background:var(--sunk);border-radius:999px;width:34px;height:34px;font-size:18px;line-height:1}
+.counts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.counts div{background:var(--sunk);border-radius:12px;padding:10px;text-align:center}
+.counts .n{font-family:var(--display);font-size:24px;font-weight:700;display:block}
+.counts .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.counts .sub{font-size:12px;color:var(--muted);display:block;margin-top:2px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.actions .btn{justify-content:center;padding:11px 10px}
+.qty{display:flex;align-items:center;gap:8px}
+.qty button{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:22px;font-weight:600}
+.qty input{text-align:center;font-family:var(--display);font-size:22px;font-weight:700;width:90px}
+.panel{background:var(--sunk);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.panel h4{margin:0;font-size:15px}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.hint.warn{color:var(--warn)} .hint.bad{color:var(--bad)}
+.panel-btns{display:flex;gap:8px;flex-wrap:wrap}
+.meta{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin:0}
+.meta dt{color:var(--muted)} .meta dd{margin:0;overflow-wrap:anywhere}
+form.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+form.fields label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+form.fields .full{grid-column:1/-1}
+.colorpick{display:flex;gap:8px;align-items:center}
+.colorpick input[type=color]{width:46px;height:40px;padding:3px;flex:none}
+@media (max-width:420px){form.fields{grid-template-columns:1fr}}
+.choose{display:flex;flex-direction:column;gap:10px}
+.choice{display:flex;flex-direction:column;gap:3px;text-align:left;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.choice:hover{border-color:var(--accent);background:var(--accent-soft)}
+.choice b{font-family:var(--display);font-size:17px}
+.choice span{color:var(--muted);font-size:13.5px}
+.sx-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;max-height:46vh;overflow:auto;background:var(--surface)}
+.sx-item{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:12px;align-items:center;padding:11px 14px;border-top:1px solid var(--line);cursor:pointer}
+.sx-item:first-child{border-top:0}
+.sx-item:hover{background:var(--sunk)}
+.sx-item input{width:18px;height:18px;accent-color:var(--accent);padding:0}
+.sx-item .name b{display:block;font-weight:600}
+.sx-item .name em{font-style:normal;color:var(--accent);font-weight:600;margin-left:4px}
+.sx-item .name small{color:var(--muted);font-size:12.5px}
+.sx-item.have{opacity:.55;cursor:default}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;font-weight:500;z-index:30;max-width:calc(100% - 32px)}
+textarea{min-height:140px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.lib-row{grid-template-columns:auto minmax(0,1fr) auto}
+.lib-row .src{font-size:12.5px;color:var(--muted);text-align:right}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(16px);opacity:.6}}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Balloon Roll Inventory</h1>
+      <p>Rolls ready, bags to roll, and what's packed for the next event.</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="status" id="status">Loading…</span><button class="btn" id="notifyBtn">Turn on alerts</button><button class="btn" id="exportBtn">Back up</button><label class="btn" for="restoreFile">Restore</label><input type="file" id="restoreFile" accept=".json,application/json" hidden></div>
+  </header>
+
+  <section class="alerts" id="alerts" aria-live="polite"></section>
+
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-tab="stock" aria-selected="true">Storage</button>
+    <button role="tab" data-tab="bag" aria-selected="false">Event bag<span class="count" id="bagCount"></span></button>
+    <button role="tab" data-tab="library" aria-selected="false">Balloon library</button>
+  </nav>
+
+  <div id="view"></div>
+</div>
+
+<div id="sheetRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+(() => {
+  // ---------- state ----------
+  let db = null, items = [], ready = false;
+  const ui = { tab: 'stock', q: '', cat: 'all', size: 'all', finish: 'all' };
+  try { const s = JSON.parse(localStorage.getItem('bri-ui') || '{}'); Object.assign(ui, s); } catch (e) {}
+  const saveUI = () => { try { localStorage.setItem('bri-ui', JSON.stringify({ tab: ui.tab, cat: ui.cat, size: ui.size, finish: ui.finish })); } catch (e) {} };
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  const COLOR_GUESS = { black:'#1b1b1b', white:'#f7f7f4', red:'#d62828', 'ruby red':'#a4161a', orange:'#f77f00', yellow:'#f6c90e', goldenrod:'#daa520', green:'#2a9d3f', 'lime green':'#8ccf3a', 'spring green':'#7ed957', blue:'#1f5fbf', 'royal blue':'#1d3fa8', 'sky blue':'#7cc4f2', 'pale blue':'#a7d3f2', navy:'#1b2a55', purple:'#6a2c91', lavender:'#b79ad9', pink:'#f48fb1', 'hot pink':'#e91e78', magenta:'#c2185b', brown:'#7b4a2a', burgundy:'#6d1a36', grey:'#9a9a9a', gray:'#9a9a9a', silver:'#c0c0c8', gold:'#c9a227', teal:'#1b8a8a', aqua:'#4fd1c5', coral:'#ff7f6e', peach:'#ffc49b', ivory:'#f3ecd8', clear:'#e8eef2', 'wild berry':'#8e2459', fuchsia:'#d1179a', 'chocolate brown':'#5a3220', 'pearl white':'#f2efe9', 'pastel pink':'#f8c8dc', 'pastel blue':'#bfdcf5', 'pastel yellow':'#fbefa6', mint:'#a8e6cf' };
+  const guessHex = name => COLOR_GUESS[String(name || '').trim().toLowerCase()] || '#b8a9c9';
+
+  // A balloon's shape comes from its size: inch sizes are rounds (kept in pouches), the rest are long balloons (kept in rolls).
+  // The section (Twisting or Decor) is just where it's listed; any size can go in either.
+  const isRound = it => /in$/i.test(String(it.size || '').trim());
+  const unitWord = (it, n) => (isRound(it) ? 'pouch' : 'roll') + (n === 1 ? '' : (isRound(it) ? 'es' : 's'));
+  const perUnit = it => Math.max(1, Number(it.perUnit) || 50);
+  const perBag = it => Math.max(1, Number(it.perBag) || 50);
+  const unitsPerBag = it => perBag(it) / perUnit(it);
+  const canMake = it => Math.floor(((Number(it.bags) || 0) * unitsPerBag(it)) + 1e-6);
+  const round3 = n => Math.round(n * 1000) / 1000;
+  const fmtBags = b => {
+    b = Number(b) || 0;
+    const whole = Math.floor(b + 1e-6), frac = round3(b - whole);
+    if (frac < 0.01) return String(whole);
+    if (Math.abs(frac - 0.5) < 0.01) return (whole ? whole : '') + '½';
+    return b.toFixed(1);
+  };
+  // Sizes: twisting balloons are 160, 260, 360; decor rounds are 5 and 11 inch.
+  const SIZES = ['160', '260', '360', '5in', '11in'];
+  const normSize = raw => {
+    const t = String(raw || '').trim().toLowerCase().replace(/\s+/g, '');
+    const n = (t.match(/^\d+/) || [''])[0];
+    if (n === '5' || n === '11') return n + 'in';
+    if (SIZES.includes(n)) return n;
+    return String(raw || '').trim();
+  };
+  // Finishes: the balloon line or color family. Standard is the default and is left out of names.
+  const FINISHES = ['Standard', 'Deluxe', 'Fashion', 'Pastel Matte', 'Pastel Dusk', 'Metallic', 'Reflex', 'Neon', 'Pearl', 'Silk'];
+
+  // ---------- Sempertex preset list ----------
+  // From Sempertex_Stock.pdf. One color per line:  finish | color | sizes it comes in | swatch color
+  // Edit a line to change which sizes a color comes in; add a line for a new color.
+  const SEMPERTEX_PER_BAG = { '160': 100, '260': 50, '360': 50, '5in': 50, '11in': 50 };
+  const SEMPERTEX_LIST = `
+Deluxe       | Rosewood        | 5in 11in 260             | #b5727a
+Deluxe       | Fuchsia         | 5in 11in 160 260 360     | #c8287a
+Deluxe       | Raspberry       | 5in 11in                 | #a3245a
+Deluxe       | Imperial Red    | 5in 11in 260             | #a8182a
+Deluxe       | Merlot          | 5in 11in 260             | #6b1730
+Deluxe       | Honey Yellow    | 5in 11in 260             | #e6b33a
+Deluxe       | Mustard         | 5in 11in 260             | #c99a2e
+Deluxe       | Eucalyptus      | 5in 11in 260             | #8fa79a
+Deluxe       | Shamrock Green  | 5in 11in 260             | #2f8f4e
+Deluxe       | Key Lime        | 5in 11in 160 260 360     | #a5c84a
+Deluxe       | Deep Teal       | 5in 11in 260             | #155e63
+Deluxe       | Turquoise Blue  | 5in 11in                 | #2aa7b8
+Deluxe       | Lilac           | 5in 11in 260             | #c3a6d6
+Deluxe       | Purple Orchid   | 5in 11in 260             | #7d4c9e
+Deluxe       | Periwinkle Blue | 5in 11in 260             | #8a9ad6
+Deluxe       | Tropical Coral  | 5in 11in 260             | #f07a6a
+Deluxe       | Rose            | 5in 11in 260             | #e39aa6
+Deluxe       | Peach Blush     | 5in 11in 160 260 360     | #f2b9a0
+Deluxe       | Sunset Orange   | 5in 11in 260             | #ef6a35
+Deluxe       | White Sand      | 5in 11in 160 260 360     | #ece4d4
+Deluxe       | Latte           | 5in 11in 260             | #c9a98a
+Deluxe       | Mocha           | 5in 11in 160 260 360     | #8c6a54
+Deluxe       | Coffee          | 5in 11in 160 260 360     | #5e4030
+Deluxe       | Chocolate       | 5in 11in 260             | #45291d
+Deluxe       | Black           | 5in 11in 160 260 360     | #1b1b1b
+Deluxe       | Grey            | 5in 11in 260 360         | #8a8d90
+Fashion      | White           | 5in 11in 160 260 360     | #f7f7f4
+Fashion      | Bubble Gum Pink | 5in 11in 160 260 360     | #f59cc2
+Fashion      | Red             | 5in 11in 160 260 360     | #d62828
+Fashion      | Yellow          | 5in 11in 160 260 360     | #f6d10e
+Fashion      | Green           | 5in 11in 260             | #3aa845
+Fashion      | Forest Green    | 5in 11in 160 260 360     | #1f5e35
+Fashion      | Robins Egg Blue | 5in 11in 260             | #8fd3d9
+Fashion      | Blue            | 5in 11in 160 260 360     | #2f7fd1
+Fashion      | Royal Blue      | 5in 11in 260 360         | #1d3fa8
+Fashion      | Navy            | 5in 11in 260             | #1b2a55
+Fashion      | Violet          | 5in 11in 160 260 360     | #6a2c91
+Fashion      | Orange          | 5in 11in 160 260 360     | #f77f00
+Pastel Matte | Pink            | 5in 11in 260             | #f6c4d4
+Pastel Matte | Yellow          | 5in 11in 260             | #f8eba0
+Pastel Matte | Green           | 5in 11in 260             | #bfe5c0
+Pastel Matte | Blue            | 5in 11in 260             | #b9dcf2
+Pastel Matte | Lilac           | 5in 11in 260             | #d7c6ea
+Pastel Matte | Malibu Peach    | 5in 11in 260             | #f8cbb0
+Pastel Matte | Nude            | 5in 11in 160 260 360     | #e8cdb8
+Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
+`;
+  const SEMPERTEX = [];
+  SEMPERTEX_LIST.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).forEach(l => {
+    const [finish, color, sizes, hex] = l.split('|').map(x => (x || '').trim());
+    for (const size of sizes.split(/\s+/).filter(Boolean)) {
+      SEMPERTEX.push({ key: 'sx' + SEMPERTEX.length, size, finish, color, perBag: SEMPERTEX_PER_BAG[size] || 50, colorHex: hex || '' });
+    }
+  });
+  const presetTitle = p => `${p.color} ${p.size}${p.finish ? ' ' + p.finish : ''}`;
+  // Finish is optional: leave it blank for brands that don't split their colors into lines.
+  const finishOf = it => String(it.finish || '').trim();
+  const label = it => `${['', 'Standard'].includes(finishOf(it)) ? '' : finishOf(it) + ' '}${it.color || 'Unnamed'} ${it.size || ''}`.trim();
+  const sizeClass = it => !isRound(it) ? (String(it.size).includes('160') ? 's160' : String(it.size).includes('360') ? 's360' : '') : '';
+  const swatch = it => `<span class="sw ${isRound(it) ? 'round' : 'twist'} ${sizeClass(it)}" style="--c:${esc(it.colorHex || guessHex(it.color))}" aria-hidden="true"></span>`;
+
+  // ---------- alert rules ----------
+  // Low inventory warning when ANY of these is true:
+  //   - bags on hand are LOW_BAGS or fewer
+  //   - ready rolls in storage are fewer than LOW_ROLLS
+  //   - rolls packed in the event bag are equal to or more than the rolls left in storage
+  const LOW_ROLLS = 4;
+  const LOW_BAGS = 1;
+  const isOut = it => (Number(it.rolls) || 0) <= (Number(it.minRolls) || 0);
+  const lowReasons = it => {
+    const r = Number(it.rolls) || 0, b = Number(it.bags) || 0, g = Number(it.bagged) || 0, out = [];
+    if (b <= LOW_BAGS) out.push(b === 0 ? 'no bags left' : `only ${fmtBags(b)} bag${b === 1 ? '' : 's'} left`);
+    if (r < LOW_ROLLS) out.push(`only ${r} ${unitWord(it, r)} in storage`);
+    if (g > 0 && g >= r) out.push(`${g} in the event bag vs ${r} in storage`);
+    return out;
+  };
+  const isLowSupply = it => lowReasons(it).length > 0;
+  // The one matching reason, or '' when several match (then it's just "Low").
+  const lowNote = it => { const r = lowReasons(it); return r.length === 1 ? r[0] : ''; };
+  const alertKind = it => {
+    if (isOut(it)) return canMake(it) >= 1 ? 'make' : 'order'; // out of rolls
+    if (isLowSupply(it)) return 'low';                         // see lowReasons()
+    return null;
+  };
+
+  // ---------- toast ----------
+  let toastT;
+  function toast(msg) {
+    $('#toastRoot').innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
+    clearTimeout(toastT); toastT = setTimeout(() => $('#toastRoot').innerHTML = '', 2600);
+  }
+
+  // ---------- writes ----------
+  async function patch(it, changes, note) {
+    if (!db) { toast('Saving is unavailable.'); return false; }
+    try {
+      await db.collection('balloons').doc(it.id).update({ ...changes, updatedAt: new Date().toISOString(), lastAction: note || '' });
+      if (note) toast(note);
+      return true;
+    } catch (e) { toast('Could not save: ' + (e && e.message || 'try again')); return false; }
+  }
+
+  // ---------- render ----------
+  function render() {
+    renderAlerts();
+    const bagged = items.filter(i => (Number(i.bagged) || 0) > 0).length;
+    $('#bagCount').textContent = bagged ? bagged : '';
+    document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === ui.tab));
+    if (ui.tab === 'stock') renderStock();
+    else if (ui.tab === 'bag') renderBag();
+    else renderLibrary();
+  }
+
+  function renderAlerts() {
+    const el = $('#alerts');
+    if (!ready) { el.innerHTML = ''; return; }
+    if (!items.length) { el.innerHTML = ''; return; }
+    const make = items.filter(i => alertKind(i) === 'make');
+    const order = items.filter(i => alertKind(i) === 'order');
+    const low = items.filter(i => alertKind(i) === 'low');
+    if (!make.length && !order.length && !low.length) { el.innerHTML = `<div class="alert-ok">Supplies look good. Every balloon has ready rolls in storage.</div>`; return; }
+    const chips = arr => arr.map(i => `<button class="chip" data-open="${esc(i.id)}">${swatch(i)}${esc(label(i))}</button>`).join('');
+    el.innerHTML =
+      (make.length ? `<div class="alert make"><span class="tag">Roll these</span><div><div class="items">${chips(make)}</div><p class="hint" style="margin-top:6px">Out of ready rolls, but you have bags to make more.</p></div></div>` : '') +
+      (order.length ? `<div class="alert order"><span class="tag">Reorder</span><div><div class="items">${chips(order)}</div><p class="hint" style="margin-top:6px">Out of rolls and out of bags.</p></div></div>` : '') +
+      (low.length ? `<div class="alert low"><span class="tag">Low supplies</span><div><div class="items">${low.map(i => `<button class="chip" data-open="${esc(i.id)}">${swatch(i)}${esc(label(i))}${lowNote(i) ? `<span class="why">· ${esc(lowNote(i))}</span>` : ''}</button>`).join('')}</div></div></div>` : '');
+  }
+
+  function filtered() {
+    const q = ui.q.trim().toLowerCase();
+    return items.filter(i =>
+      (ui.cat === 'all' || i.category === ui.cat) &&
+      (ui.size === 'all' || String(i.size) === ui.size) &&
+      (ui.finish === 'all' || (ui.finish === 'none' ? !finishOf(i) : finishOf(i) === ui.finish)) &&
+      (!q || [finishOf(i), i.color, i.size, i.brand, i.source].join(' ').toLowerCase().includes(q)));
+  }
+
+  function filtersHTML(showAdd) {
+    const sizes = [...new Set(items.map(i => String(i.size || '')).filter(Boolean))].sort((a, b) => parseFloat(a) - parseFloat(b) || a.localeCompare(b));
+    const finishes = [...new Set([...FINISHES, ...items.map(finishOf).filter(Boolean)])];
+    return `<div class="filters">
+      <input type="search" id="q" placeholder="Search color, brand, supplier" value="${esc(ui.q)}" aria-label="Search">
+      <div class="seg" role="group" aria-label="Type">
+        ${[['all','All'],['twist','Twisting'],['decor','Decor']].map(([v,l]) => `<button data-cat="${v}" aria-pressed="${ui.cat===v}">${l}</button>`).join('')}
+      </div>
+      <select id="size" aria-label="Size"><option value="all">All sizes</option>${sizes.map(s => `<option ${ui.size===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      <select id="finish" aria-label="Finish"><option value="all">All finishes</option>${finishes.map(f => `<option ${ui.finish===f?'selected':''}>${esc(f)}</option>`).join('')}<option value="none" ${ui.finish==='none'?'selected':''}>No finish</option></select>
+      ${showAdd ? `<button class="btn primary" id="addBtn">+ Add balloon</button>` : ''}
+    </div>`;
+  }
+
+  const finishRank = it => { if (!finishOf(it)) return -1; const i = FINISHES.indexOf(finishOf(it)); return i < 0 ? FINISHES.length : i; };
+  function sortItems(arr) {
+    return arr.slice().sort((a, b) => (a.category === b.category ? 0 : a.category === 'twist' ? -1 : 1)
+      || (parseFloat(a.size) || 0) - (parseFloat(b.size) || 0) || finishRank(a) - finishRank(b) || String(a.color).localeCompare(String(b.color)));
+  }
+
+  function emptyState() {
+    if (!ready) return `<div class="empty"><b>Loading your inventory…</b></div>`;
+        return `<div class="empty"><b>No balloons yet</b>Add your first balloon type, or paste your preset list in the Balloon library tab.<div style="margin-top:12px"><button class="btn primary" id="addBtn2">+ Add balloon</button></div></div>`;
+  }
+
+  function exampleBanner() {
+    return items.some(i => i.example) ? `<div class="banner"><span>The rows marked <b>Example</b> are sample balloons to show how this works.</span><button class="btn" id="clearEx">Remove examples</button></div>` : '';
+  }
+
+  function renderStock() {
+    const list = sortItems(filtered());
+    let html = exampleBanner() + filtersHTML(true);
+    if (!items.length) html += emptyState();
+    else if (!list.length) html += `<div class="empty"><b>Nothing matches</b>Try a different search or size.</div>`;
+    else {
+      for (const [cat, title] of [['twist', 'Twisting balloons'], ['decor', 'Decor balloons']]) {
+        const g = list.filter(i => i.category === cat);
+        if (!g.length) continue;
+        html += `<section><div class="group-h"><h2>${title}</h2><span>${g.length} type${g.length === 1 ? '' : 's'}</span></div><div class="list">` +
+          g.map(i => {
+            const k = alertKind(i), r = Number(i.rolls) || 0, cm = canMake(i);
+            return `<button class="row" data-open="${esc(i.id)}">
+              ${swatch(i)}
+              <span class="name"><b>${esc(label(i))}${k === 'make' ? '<span class="flag make">Roll</span>' : k === 'order' ? '<span class="flag order">Reorder</span>' : k === 'low' ? '<span class="flag low">Low</span>' : ''}${i.example ? '<span class="flag ex">Example</span>' : ''}</b><small>${esc([i.brand, i.source].filter(Boolean).join(' · ') || '—')}</small></span>
+              <span class="stat ${r ? '' : 'zero'}"><span class="n">${r}</span><span class="l">${unitWord(i, 2)}</span></span>
+              <span class="stat ${Number(i.bags) ? '' : 'zero'}"><span class="n">${fmtBags(i.bags)}</span><span class="l">bags</span></span>
+              <span class="stat ${cm ? '' : 'zero'}"><span class="n">${cm}</span><span class="l">can make</span></span>
+            </button>`;
+          }).join('') + `</div></section>`;
+      }
+    }
+    $('#view').innerHTML = html;
+  }
+
+  function renderBag() {
+    const list = sortItems(items.filter(i => (Number(i.bagged) || 0) > 0));
+    let html = `<p class="hint">Rolls packed for an event. They're already out of the storage count. After the event, send leftovers back to storage and mark the rest as used.</p>`;
+    if (!list.length) html += `<div class="empty"><b>Event bag is empty</b>Open a balloon in Storage and choose “Pack for event”.</div>`;
+    else {
+      html += `<div class="panel-btns" style="justify-content:flex-end"><button class="btn" id="bagReturnAll">Return all to storage</button><button class="btn" id="bagUsedAll">Mark all used</button></div>
+      <div class="list">` + list.map(i => `<button class="row lib-row" data-open="${esc(i.id)}">${swatch(i)}<span class="name"><b>${esc(label(i))}</b><small>${esc(i.category === 'decor' ? 'Decor' : 'Twisting')}</small></span><span class="stat"><span class="n">${Number(i.bagged)}</span><span class="l">${unitWord(i, 2)} packed</span></span></button>`).join('') + `</div>`;
+    }
+    $('#view').innerHTML = html;
+  }
+
+  function renderLibrary() {
+    const list = sortItems(filtered());
+    let html = exampleBanner() + `<p class="hint">Each balloon's details: color, size, how many come in a bag, brand, and where you order it. Tap one to edit or delete it.</p>` + filtersHTML(true);
+    if (!items.length) html += emptyState();
+    else html += `<div class="list">` + list.map(i => `<button class="row lib-row" data-edit="${esc(i.id)}">${swatch(i)}<span class="name"><b>${esc(label(i))}${i.example ? '<span class="flag ex">Example</span>' : ''}</b><small>${finishOf(i) ? esc(finishOf(i)) + ' · ' : ''}${esc(i.brand || 'No brand')} · ${perBag(i)} per bag · ${perUnit(i)} per ${unitWord(i,1)} · makes ${+unitsPerBag(i).toFixed(2)} ${unitWord(i, 2)}/bag</small></span><span class="src">${esc(i.source || '')}</span></button>`).join('') + `</div>`;
+    html += `<section class="panel" style="margin-top:6px">
+      <h4>Import your preset list</h4>
+      <p class="hint">One balloon per line, comma separated: <b>type, size, color, finish, balloons per bag, brand, supplier</b>. Type is the section it goes in, “twisting” or “decor”; any size works in either. Finish is optional: Standard, Deluxe, Fashion, Pastel Matte or your own, or leave it blank if the brand doesn't use finishes. Optional 8th column: balloons per roll or pouch (defaults to 50).</p>
+      <textarea id="importText" placeholder="twisting, 260, Black, Standard, 100, Qualatex, Bargain Balloons&#10;twisting, 260, White, Fashion, 100, Qualatex, Bargain Balloons&#10;twisting, 160, Blue, Pastel Matte, 100, Sempertex, Amazon&#10;decor, 11in, Gold, Deluxe, 100, Tuftex, Costco"></textarea>
+      <div class="panel-btns"><button class="btn primary" id="importBtn">Import list</button><span class="hint" id="importMsg"></span></div>
+    </section>`;
+    $('#view').innerHTML = html;
+  }
+
+  // ---------- sheets ----------
+  function closeSheet() { $('#sheetRoot').innerHTML = ''; }
+  function openSheet(inner) {
+    $('#sheetRoot').innerHTML = `<div class="scrim" id="scrim"><div class="sheet" role="dialog" aria-modal="true">${inner}</div></div>`;
+    $('#scrim').addEventListener('click', e => { if (e.target.id === 'scrim') closeSheet(); });
+    const f = $('#sheetRoot [autofocus]'); if (f) f.focus();
+  }
+
+  let detailId = null, detailMode = null;
+  function openDetail(id, mode) {
+    detailId = id; detailMode = mode || null;
+    const it = items.find(i => i.id === id); if (!it) { closeSheet(); return; }
+    const r = Number(it.rolls) || 0, b = Number(it.bags) || 0, bg = Number(it.bagged) || 0, cm = canMake(it), upb = unitsPerBag(it);
+    const U = unitWord(it, 2), u1 = unitWord(it, 1);
+    const modes = {
+      make: { title: `Make ${U}`, max: cm, verb: `Add ${U}`, hint: n => `Uses ${fmtBags(round3(n / upb))} bag${round3(n/upb) === 1 ? '' : 's'} (${perBag(it)} per bag → ${+upb.toFixed(2)} ${U} each).`, empty: `No bags on hand. Log a delivery first.` },
+      bags: { title: 'Bags received', max: 999, verb: 'Add bags', hint: n => `That's ${Math.floor(n * upb)} more ${U} you could make. Ready ${U} stay at ${r}.` },
+      pack: { title: 'Pack for event', max: r, verb: 'Move to event bag', hint: n => `Moves ${n} ${n===1?u1:U} out of storage into the event bag.`, empty: `No ready ${U} in storage.` },
+      remove: { title: `Remove ${U} from storage`, max: r, verb: `Remove ${U}`, hint: n => `For ${U} that were used, given away or damaged. Storage drops to ${r - n}.`, empty: `No ready ${U} in storage.` },
+      ret: { title: 'Return from event bag', max: bg, verb: 'Return to storage', hint: n => `Puts ${n} ${n===1?u1:U} back into storage.` },
+      used: { title: 'Used at event', max: bg, verb: 'Mark used', hint: n => `Takes ${n} ${n===1?u1:U} out of the event bag for good.` },
+    };
+    let panel = '';
+    if (mode && modes[mode]) {
+      const m = modes[mode];
+      if (m.max < 1) panel = `<div class="panel"><h4>${m.title}</h4><p class="hint warn">${m.empty || 'Nothing to move.'}</p><div class="panel-btns"><button class="btn" data-mode="">Back</button></div></div>`;
+      else panel = `<div class="panel"><h4>${m.title}</h4>
+        <div class="qty"><button data-step="-1" aria-label="Less">−</button><input id="qty" type="number" inputmode="numeric" min="1" max="${m.max}" value="1" autofocus><button data-step="1" aria-label="More">+</button>${mode !== 'bags' ? `<span class="hint">max ${m.max}</span>` : ''}</div>
+        <p class="hint" id="qtyHint">${esc(m.hint(1))}</p>
+        <div class="panel-btns"><button class="btn primary" data-do="${mode}">${m.verb}</button><button class="btn ghost" data-mode="">Cancel</button></div></div>`;
+      openDetail.modes = modes;
+    } else if (mode === 'adjust') {
+      panel = `<div class="panel"><h4>Correct the counts</h4><p class="hint">For a recount. Nothing is converted automatically here.</p>
+        <form class="fields" id="adjForm">
+          <label>Ready ${U}<input type="number" min="0" step="1" id="adjR" value="${r}"></label>
+          <label>Bags (½ allowed)<input type="number" min="0" step="0.5" id="adjB" value="${round3(b)}"></label>
+          <label>In event bag<input type="number" min="0" step="1" id="adjG" value="${bg}"></label>
+          <label>Alert when ${U} at or below<input type="number" min="0" step="1" id="adjMin" value="${Number(it.minRolls) || 0}"></label>
+          <div class="full panel-btns"><button class="btn primary" type="button" data-submit="1">Save counts</button><button class="btn ghost" type="button" data-mode="">Cancel</button></div>
+        </form></div>`;
+    }
+    const k = alertKind(it);
+    openSheet(`
+      <div class="sheet-h">${swatch(it)}<h3>${esc(label(it))}</h3><button class="x" id="closeX" aria-label="Close">×</button></div>
+      ${k === 'make' ? `<p class="hint warn">Out of ready ${U}. You have bags to make ${cm} more.</p>` : k === 'order' ? `<p class="hint bad">Out of ${U} and out of bags. Time to reorder${it.source ? ' from ' + esc(it.source) : ''}.</p>` : k === 'low' ? `<p class="hint low">Low inventory${lowNote(it) ? ': ' + esc(lowNote(it)) : ''}.</p>` : ''}
+      <div class="counts">
+        <div><span class="n">${r}</span><span class="l">${U} ready</span></div>
+        <div><span class="n">${fmtBags(b)}</span><span class="l">bags</span><span class="sub">can make ${cm}</span></div>
+        <div><span class="n">${bg}</span><span class="l">event bag</span></div>
+      </div>
+      ${panel || `<div class="actions">
+        <button class="btn primary" data-mode="make">Make ${U}</button>
+        <button class="btn" data-mode="bags">Bags received</button>
+        <button class="btn" data-mode="pack">Pack for event</button>
+        <button class="btn" data-mode="remove">Remove from storage</button>
+        ${bg ? `<button class="btn" data-mode="ret">Return from bag</button><button class="btn" data-mode="used">Used at event</button>` : ''}
+      </div>`}
+      <dl class="meta">
+        <dt>Section</dt><dd>${it.category === 'decor' ? 'Decor' : 'Twisting'}</dd>
+        ${finishOf(it) ? `<dt>Finish</dt><dd>${esc(finishOf(it))}</dd>` : ''}
+        <dt>Bag</dt><dd>${perBag(it)} balloons → ${+upb.toFixed(2)} ${U}</dd>
+        <dt>Brand</dt><dd>${esc(it.brand || '—')}</dd>
+        <dt>Supplier</dt><dd>${esc(it.source || '—')}</dd>
+        ${it.notes ? `<dt>Notes</dt><dd>${esc(it.notes)}</dd>` : ''}
+        ${it.lastAction ? `<dt>Last change</dt><dd>${esc(it.lastAction)}${it.updatedAt ? ' · ' + new Date(it.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}</dd>` : ''}
+      </dl>
+      <div class="panel-btns"><button class="btn" data-mode="adjust">Correct counts</button><button class="btn" data-edit="${esc(it.id)}">Edit details</button></div>
+    `);
+  }
+
+  // ---------- add: choose manual or Sempertex ----------
+  function openAddChooser() {
+    openSheet(`
+      <div class="sheet-h"><h3>Add a balloon</h3><button class="x" id="closeX" aria-label="Close">×</button></div>
+      <div class="choose">
+        <button class="choice" id="pickSx"><b>From the Sempertex list</b><span>Pick from ${SEMPERTEX.length} preset Sempertex balloons. Details fill in for you.</span></button>
+        <button class="choice" id="pickManual"><b>Add manually</b><span>Fill in color, size, finish, brand and supplier yourself.</span></button>
+      </div>`);
+    $('#pickManual').onclick = () => openEditor(null);
+    $('#pickSx').onclick = () => openSempertex();
+  }
+
+  const sx = { q: '', size: 'all', finish: 'all', picked: new Set() };
+  const inInventory = p => items.some(i => String(i.brand).toLowerCase() === 'sempertex' && String(i.size) === p.size
+    && finishOf(i).toLowerCase() === p.finish.toLowerCase() && String(i.color).toLowerCase() === p.color.toLowerCase());
+  function openSempertex() {
+    sx.picked = new Set();
+    const sizes = [...new Set(SEMPERTEX.map(p => p.size))].sort((a, b) => parseFloat(a) - parseFloat(b));
+    const finishes = [...new Set(SEMPERTEX.map(p => p.finish).filter(Boolean))];
+    openSheet(`
+      <div class="sheet-h"><h3>Sempertex list</h3><button class="x" id="closeX" aria-label="Close">×</button></div>
+      <div class="filters">
+        <input type="search" id="sxQ" placeholder="Search color or finish" aria-label="Search Sempertex list" value="${esc(sx.q)}">
+        <select id="sxSize" aria-label="Size"><option value="all">All sizes</option>${sizes.map(s => `<option ${sx.size===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+        <select id="sxFinish" aria-label="Finish"><option value="all">All finishes</option>${finishes.map(f => `<option ${sx.finish===f?'selected':''}>${esc(f)}</option>`).join('')}${SEMPERTEX.some(p => !p.finish) ? `<option value="none" ${sx.finish==='none'?'selected':''}>No finish</option>` : ''}</select>
+      </div>
+      <div class="sx-list" id="sxList"></div>
+      <div class="panel">
+        <form class="fields" id="sxForm">
+          <label>Section<select id="sxCat"><option value="auto">Match size (rounds in Decor)</option><option value="twist">All in Twisting</option><option value="decor">All in Decor</option></select></label>
+          <label>Where you order it (optional)<input id="sxSource" placeholder="Supplier or store"></label>
+        </form>
+      </div>
+      <div class="sticky-actions"><button class="btn primary" type="button" id="sxAdd" disabled>Choose balloons to add</button><button class="btn ghost" type="button" id="sxBack">Back</button></div>`);
+    const draw = () => {
+      const q = sx.q.trim().toLowerCase();
+      const list = SEMPERTEX.filter(p => (sx.size === 'all' || p.size === sx.size)
+        && (sx.finish === 'all' || (sx.finish === 'none' ? !p.finish : p.finish === sx.finish))
+        && (!q || presetTitle(p).toLowerCase().includes(q)));
+      $('#sxList').innerHTML = list.length ? list.map(p => {
+        const have = inInventory(p), on = sx.picked.has(p.key);
+        return `<label class="sx-item ${have ? 'have' : ''}">
+          <input type="checkbox" data-sx="${p.key}" ${on ? 'checked' : ''} ${have ? 'disabled' : ''}>
+          ${swatch({ size: p.size, color: p.color, colorHex: p.colorHex })}
+          <span class="name"><b>${esc(p.color)} ${esc(p.size)}${p.finish ? ' <em>' + esc(p.finish) + '</em>' : ''}</b><small>${have ? 'Already in your library' : `${p.perBag} per bag`}</small></span>
+        </label>`;
+      }).join('') : `<p class="hint" style="padding:12px">Nothing matches.</p>`;
+      updateBtn();
+    };
+    const updateBtn = () => {
+      const n = sx.picked.size;
+      $('#sxAdd').disabled = !n;
+      $('#sxAdd').textContent = n ? `Add ${n} balloon${n === 1 ? '' : 's'}` : 'Choose balloons to add';
+    };
+    draw();
+    $('#sxQ').addEventListener('input', e => { sx.q = e.target.value; draw(); });
+    $('#sxSize').addEventListener('change', e => { sx.size = e.target.value; draw(); });
+    $('#sxFinish').addEventListener('change', e => { sx.finish = e.target.value; draw(); });
+    $('#sxList').addEventListener('change', e => { const k = e.target.dataset.sx; if (!k) return; e.target.checked ? sx.picked.add(k) : sx.picked.delete(k); updateBtn(); });
+    $('#sxBack').onclick = () => openAddChooser();
+    $('#sxAdd').addEventListener('click', async () => {
+      const chosen = SEMPERTEX.filter(p => sx.picked.has(p.key));
+      if (!chosen.length) return;
+      const catMode = $('#sxCat').value, source = $('#sxSource').value.trim();
+      $('#sxAdd').disabled = true;
+      let done = 0;
+      for (const p of chosen) {
+        const category = catMode === 'auto' ? (isRound(p) ? 'decor' : 'twist') : catMode;
+        try {
+          await db.collection('balloons').add({ category, size: p.size, color: p.color, finish: p.finish, colorHex: p.colorHex || guessHex(p.color),
+            perBag: p.perBag, perUnit: isRound(p) ? p.perBag : 50, brand: 'Sempertex', source, notes: '',
+            rolls: 0, bags: 0, bagged: 0, minRolls: 0, createdAt: new Date().toISOString() });
+          done++;
+        } catch (err) { break; }
+      }
+      toast(`Added ${done} Sempertex balloon${done === 1 ? '' : 's'}`);
+      closeSheet();
+    });
+  }
+
+  function openEditor(id) {
+    const it = id ? items.find(i => i.id === id) : null;
+    const v = it || { category: ui.cat === 'decor' ? 'decor' : 'twist', size: '', color: '', perBag: 100, perUnit: 50, brand: '', source: '', notes: '' };
+    const hex = v.colorHex || guessHex(v.color);
+    openSheet(`
+      <div class="sheet-h"><h3>${it ? 'Edit balloon' : 'Add a balloon'}</h3><button class="x" id="closeX" aria-label="Close">×</button></div>
+      <form class="fields" id="editForm">
+        <label>Section<select id="fCat"><option value="twist" ${v.category==='twist'?'selected':''}>Twisting</option><option value="decor" ${v.category==='decor'?'selected':''}>Decor</option></select></label>
+        <label>Size<select id="fSize" required></select></label>
+        <label class="full">Finish (optional)<input id="fFinish" list="finishList" value="${esc(finishOf(v))}" placeholder="None. Leave blank if the brand doesn't use finishes"></label>
+        <datalist id="finishList">${FINISHES.map(f => `<option>${f}</option>`).join('')}</datalist>
+        <label class="full">Color<span class="colorpick"><input id="fColor" required value="${esc(v.color)}" placeholder="Black" autofocus><input type="color" id="fHex" value="${esc(hex)}" aria-label="Swatch color"></span></label>
+        <label>Balloons per bag<input id="fPerBag" type="number" min="1" required value="${esc(v.perBag)}"></label>
+        <label>Balloons per <span id="unitLbl">${isRound(v)?'pouch':'roll'}</span><input id="fPerUnit" type="number" min="1" required value="${esc(v.perUnit || 50)}"></label>
+        <label>Brand<input id="fBrand" value="${esc(v.brand)}" placeholder="Qualatex"></label>
+        <label>Where it's ordered from<input id="fSource" value="${esc(v.source)}" placeholder="Supplier or store"></label>
+        <label class="full">Notes<input id="fNotes" value="${esc(v.notes || '')}" placeholder="Optional"></label>
+        <p class="hint full" id="fCalc"></p>
+        <div class="full panel-btns">
+          <button class="btn primary" type="button" data-submit="1">${it ? 'Save changes' : 'Add balloon'}</button>
+          ${it ? `<button class="btn danger" type="button" id="delAsk">Delete</button>` : ''}
+        </div>
+        <div class="full" id="delConfirm"></div>
+      </form>`);
+    // Every size is offered in both sections. A new balloon starts on 260 (Twisting) or 11in (Decor).
+    const opts = SIZES.slice(), keep = v.size ? normSize(v.size) : '';
+    if (keep && !opts.includes(keep)) opts.push(keep); // keep an older custom size
+    const startSize = keep || (v.category === 'decor' ? '11in' : '260');
+    $('#fSize').innerHTML = opts.map(o => `<option ${o === startSize ? 'selected' : ''}>${esc(o)}</option>`).join('');
+    let sizeTouched = !!it;
+    $('#fSize').addEventListener('change', () => { sizeTouched = true; calc(); });
+    $('#fCat').addEventListener('change', () => { if (!sizeTouched) $('#fSize').value = $('#fCat').value === 'decor' ? '11in' : '260'; calc(); });
+    let hexTouched = !!(it && it.colorHex);
+    const calc = () => { const pb = +$('#fPerBag').value || 0, pu = +$('#fPerUnit').value || 0, rnd = isRound({ size: $('#fSize').value }), w = rnd ? 'pouches' : 'rolls';
+      $('#fCalc').textContent = pb && pu ? `Each bag makes ${+(pb / pu).toFixed(2)} ${w}.` : ''; $('#unitLbl').textContent = rnd ? 'pouch' : 'roll'; };
+    calc();
+    ['#fPerBag', '#fPerUnit', '#fCat'].forEach(s => $(s).addEventListener('input', calc));
+    $('#fHex').addEventListener('input', () => hexTouched = true);
+    $('#fColor').addEventListener('input', () => { if (!hexTouched) $('#fHex').value = guessHex($('#fColor').value); });
+    $('#editForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!db) { toast('Saving is unavailable.'); return; }
+      const body = { category: $('#fCat').value, size: $('#fSize').value.trim(), color: $('#fColor').value.trim(), finish: $('#fFinish').value.trim(), colorHex: $('#fHex').value,
+        perBag: +$('#fPerBag').value, perUnit: +$('#fPerUnit').value, brand: $('#fBrand').value.trim(), source: $('#fSource').value.trim(), notes: $('#fNotes').value.trim() };
+      try {
+        if (it) { await db.collection('balloons').doc(it.id).update({ ...body, example: false }); toast('Saved ' + label(body)); openDetail(it.id); }
+        else { await db.collection('balloons').add({ ...body, rolls: 0, bags: 0, bagged: 0, minRolls: 0, createdAt: new Date().toISOString() }); toast('Added ' + label(body)); closeSheet(); }
+      } catch (err) { toast('Could not save: ' + (err && err.message || 'try again')); }
+    });
+    const del = $('#delAsk');
+    if (del) del.addEventListener('click', () => {
+      $('#delConfirm').innerHTML = `<div class="panel"><p class="hint bad">Delete ${esc(label(it))} and all its counts? This can't be undone.</p><div class="panel-btns"><button class="btn danger" type="button" id="delYes">Yes, delete</button><button class="btn ghost" type="button" id="delNo">Keep it</button></div></div>`;
+      $('#delNo').onclick = () => $('#delConfirm').innerHTML = '';
+      $('#delYes').onclick = async () => { try { await db.collection('balloons').doc(it.id).delete(); toast('Deleted ' + label(it)); closeSheet(); } catch (err) { toast('Could not delete.'); } };
+    });
+  }
+
+  // ---------- actions ----------
+  async function doAction(mode, n) {
+    const it = items.find(i => i.id === detailId); if (!it) return;
+    n = Math.floor(n); if (!(n >= 1)) { toast('Enter a number of 1 or more.'); return; }
+    const r = Number(it.rolls) || 0, b = Number(it.bags) || 0, bg = Number(it.bagged) || 0, upb = unitsPerBag(it), U = unitWord(it, n), L = label(it);
+    let ok = false;
+    if (mode === 'make') { if (n > canMake(it)) return toast(`Only enough bags for ${canMake(it)}.`); ok = await patch(it, { rolls: r + n, bags: Math.max(0, round3(b - n / upb)) }, `Made ${n} ${L} ${U}`); }
+    if (mode === 'bags') ok = await patch(it, { bags: round3(b + n) }, `Added ${n} bag${n===1?'':'s'} of ${L}`);
+    if (mode === 'pack') { if (n > r) return toast(`Only ${r} in storage.`); ok = await patch(it, { rolls: r - n, bagged: bg + n }, `Packed ${n} ${L} ${U}`); }
+    if (mode === 'remove') { if (n > r) return toast(`Only ${r} in storage.`); ok = await patch(it, { rolls: r - n }, `Removed ${n} ${L} ${U}`); }
+    if (mode === 'ret') { if (n > bg) return toast(`Only ${bg} in the bag.`); ok = await patch(it, { rolls: r + n, bagged: bg - n }, `Returned ${n} ${L} ${U}`); }
+    if (mode === 'used') { if (n > bg) return toast(`Only ${bg} in the bag.`); ok = await patch(it, { bagged: bg - n }, `Used ${n} ${L} ${U}`); }
+    if (ok) openDetail(it.id);
+  }
+
+  async function bagAll(kind) {
+    const list = items.filter(i => (Number(i.bagged) || 0) > 0);
+    for (const it of list) {
+      const bg = Number(it.bagged);
+      if (kind === 'return') await patch(it, { rolls: (Number(it.rolls) || 0) + bg, bagged: 0 }, `Returned ${bg} ${label(it)} ${unitWord(it, bg)}`);
+      else await patch(it, { bagged: 0 }, `Used ${bg} ${label(it)} ${unitWord(it, bg)}`);
+    }
+    toast(kind === 'return' ? 'Event bag returned to storage' : 'Event bag marked used');
+  }
+
+  async function importList() {
+    if (!db) { toast('Saving is unavailable here.'); return; }
+    const lines = $('#importText').value.split(/\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    const rows = [], bad = [];
+    lines.forEach((l, idx) => {
+      const c = l.split(',').map(s => s.trim());
+      if (/^type$/i.test(c[0])) return;
+      const cat = /decor|round/i.test(c[0]) ? 'decor' : /twist/i.test(c[0]) ? 'twist' : null;
+      // Older 6-7 column lines have no finish; the 4th column is then the bag count.
+      if (/^\d+$/.test(c[3] || '')) c.splice(3, 0, '');
+      const finish = c[3] ? (FINISHES.find(f => f.toLowerCase() === c[3].toLowerCase()) || c[3]) : '';
+      const pb = parseInt(c[4], 10);
+      if (!cat || !c[1] || !c[2] || !(pb > 0)) { bad.push(idx + 1); return; }
+      rows.push({ category: cat, size: normSize(c[1]), color: c[2], finish, colorHex: guessHex(c[2]), perBag: pb, brand: c[5] || '', source: c[6] || '', perUnit: parseInt(c[7], 10) || 50,
+        notes: '', rolls: 0, bags: 0, bagged: 0, minRolls: 0, createdAt: new Date().toISOString() });
+    });
+    if (!rows.length) { $('#importMsg').textContent = bad.length ? `Couldn't read line${bad.length>1?'s':''} ${bad.join(', ')}. Check the column order.` : 'Paste at least one line first.'; return; }
+    $('#importMsg').textContent = `Importing ${rows.length}…`;
+    let done = 0;
+    for (const r of rows) { try { await db.collection('balloons').add(r); done++; } catch (e) { break; } }
+    $('#importMsg').textContent = `Imported ${done} balloon${done===1?'':'s'}.` + (bad.length ? ` Skipped line${bad.length>1?'s':''} ${bad.join(', ')}.` : '');
+    if (done) $('#importText').value = '';
+  }
+
+  // ---------- events ----------
+  document.addEventListener('click', e => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.closest('#tabs')) { ui.tab = t.dataset.tab; saveUI(); render(); return; }
+    if (t.dataset.cat) { ui.cat = t.dataset.cat; saveUI(); render(); return; }
+    if (t.dataset.submit && t.form) { if (t.form.reportValidity()) t.form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); return; }
+    if (t.dataset.open) { openDetail(t.dataset.open); return; }
+    if (t.dataset.edit) { openEditor(t.dataset.edit); return; }
+    if (t.dataset.mode !== undefined) { openDetail(detailId, t.dataset.mode || null); return; }
+    if (t.dataset.do) { doAction(t.dataset.do, +$('#qty').value); return; }
+    if (t.dataset.step) {
+      const q = $('#qty'), max = +q.max || 999; q.value = Math.min(max, Math.max(1, (+q.value || 1) + +t.dataset.step));
+      q.dispatchEvent(new Event('input')); return;
+    }
+    if (t.id === 'closeX') { closeSheet(); return; }
+    if (t.id === 'addBtn' || t.id === 'addBtn2') { openAddChooser(); return; }
+    if (t.id === 'importBtn') { importList(); return; }
+    if (t.id === 'bagReturnAll') { bagAll('return'); return; }
+    if (t.id === 'bagUsedAll') { bagAll('used'); return; }
+    if (t.id === 'clearEx') { (async () => { for (const i of items.filter(i => i.example)) { try { await db.collection('balloons').doc(i.id).delete(); } catch (e) {} } toast('Examples removed'); })(); return; }
+  });
+  document.addEventListener('input', e => {
+    if (e.target.id === 'q') { ui.q = e.target.value; const pos = e.target.selectionStart; renderStockOrLib(); const q = $('#q'); if (q) { q.focus(); q.setSelectionRange(pos, pos); } }
+    if (e.target.id === 'qty' && openDetail.modes && detailMode && openDetail.modes[detailMode]) {
+      const n = Math.max(1, Math.floor(+e.target.value || 1)); $('#qtyHint').textContent = openDetail.modes[detailMode].hint(n);
+    }
+  });
+  document.addEventListener('change', e => { if (e.target.id === 'size') { ui.size = e.target.value; saveUI(); render(); }
+    if (e.target.id === 'finish') { ui.finish = e.target.value; saveUI(); render(); } });
+  document.addEventListener('submit', async e => {
+    if (e.target.id !== 'adjForm') return;
+    e.preventDefault();
+    const it = items.find(i => i.id === detailId); if (!it) return;
+    const ok = await patch(it, { rolls: Math.max(0, Math.floor(+$('#adjR').value || 0)), bags: Math.max(0, round3(+$('#adjB').value || 0)), bagged: Math.max(0, Math.floor(+$('#adjG').value || 0)), minRolls: Math.max(0, Math.floor(+$('#adjMin').value || 0)) }, `Recounted ${label(it)}`);
+    if (ok) openDetail(it.id);
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+  function renderStockOrLib() { if (ui.tab === 'stock') renderStock(); else if (ui.tab === 'library') renderLibrary(); }
+
+  render();
+
+  // ---------- service worker (notifications on phones + offline use) ----------
+  // Only runs when the app is served from a website (like GitHub Pages), not from a local file.
+  let swReady = null;
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    swReady = navigator.serviceWorker.register('sw.js')
+      .then(() => navigator.serviceWorker.ready)
+      .catch(() => null)
+      .then(reg => reg || Promise.reject(new Error('no service worker')));
+    swReady.catch(() => {});
+  }
+
+  // ---------- data (saved in this browser's localStorage) ----------
+  const KEY = 'balloon-inventory-v1';
+  const listeners = [];
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } };
+  const store = load();
+  const emit = () => { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { toast('Could not save to this browser.'); } listeners.forEach(fn => fn()); };
+  const snap = () => ({ docs: Object.entries(store).map(([id, d]) => ({ id, data: () => d })) });
+  db = { collection: () => ({
+    add: async data => { const id = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); store[id] = { ...data }; emit(); return { id }; },
+    doc: id => ({
+      update: async ch => { if (!store[id]) throw new Error('Balloon not found'); store[id] = { ...store[id], ...ch }; emit(); },
+      delete: async () => { delete store[id]; emit(); },
+    }),
+    onSnapshot: fn => { const run = () => fn(snap()); listeners.push(run); run(); },
+  }) };
+  // other tabs/windows stay in sync
+  window.addEventListener('storage', e => { if (e.key === KEY) { const fresh = load(); for (const k in store) delete store[k]; Object.assign(store, fresh); listeners.forEach(fn => fn()); } });
+
+  db.collection('balloons').onSnapshot(s => {
+    items = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    ready = true;
+    $('#status').textContent = `${items.length} balloon type${items.length === 1 ? '' : 's'} · saved on this device`;
+    render();
+    if ($('#scrim') && detailId && $('.counts')) openDetail(detailId, detailMode);
+    checkNotifications();
+  });
+
+  // ---------- device notifications ----------
+  // Sends one notification when a balloon first becomes low, needs rolling, or needs reordering.
+  // It won't repeat for that balloon until it's restocked and drops again.
+  function canNotify() { return 'Notification' in window && Notification.permission === 'granted'; }
+  function updateNotifyBtn() {
+    const b = $('#notifyBtn');
+    if (!('Notification' in window)) { b.hidden = true; return; }
+    b.textContent = Notification.permission === 'granted' ? 'Alerts on' : Notification.permission === 'denied' ? 'Alerts blocked' : 'Turn on alerts';
+    b.disabled = Notification.permission !== 'default';
+  }
+  $('#notifyBtn').addEventListener('click', async () => {
+    try { await Notification.requestPermission(); } catch (e) {}
+    updateNotifyBtn();
+    if (canNotify()) { toast('Alerts are on'); checkNotifications(true); }
+    else toast('Alerts were not allowed. You can change this in your browser settings.');
+  });
+  function checkNotifications(force) {
+    let sent = {};
+    try { sent = JSON.parse(localStorage.getItem('balloon-inventory-notified') || '{}'); } catch (e) {}
+    const now = {};
+    const fresh = [];
+    for (const it of items) {
+      const k = alertKind(it);
+      if (!k) continue;
+      now[it.id] = k;
+      if (force || sent[it.id] !== k) fresh.push([it, k]);
+    }
+    try { localStorage.setItem('balloon-inventory-notified', JSON.stringify(now)); } catch (e) {}
+    if (!fresh.length || !canNotify()) return;
+    const msg = { low: 'Low inventory', make: 'Out of rolls, bags ready to roll', order: 'Out of rolls and bags. Reorder' };
+    const body = fresh.slice(0, 5).map(([it, k]) => `${label(it)}: ${k === 'low' ? (lowNote(it) ? 'Low, ' + lowNote(it) : 'Low inventory') : msg[k]}`).join('\n') + (fresh.length > 5 ? `\n+${fresh.length - 5} more` : '');
+    const title = fresh.length === 1 ? 'Balloon supplies' : `${fresh.length} balloons need attention`;
+    const opts = { body, tag: 'balloon-inventory', icon: 'icon-192.png', badge: 'icon-192.png' };
+    // Phones only allow notifications through the service worker; computers also accept the simple way.
+    (swReady || Promise.reject()).then(reg => reg.showNotification(title, opts))
+      .catch(() => { try { new Notification(title, opts); } catch (e) {} });
+  }
+  updateNotifyBtn();
+
+  // ---------- backup ----------
+  $('#exportBtn').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'balloon-inventory-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  $('#restoreFile').addEventListener('change', async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { const data = JSON.parse(await f.text()); if (typeof data !== 'object' || Array.isArray(data)) throw 0;
+      for (const k in store) delete store[k]; Object.assign(store, data); emit(); toast('Backup restored'); }
+    catch (err) { toast('That file is not a balloon inventory backup.'); }
+    e.target.value = '';
+  });
+})();
+</script>
+
+</body>
+</html>
