@@ -376,9 +376,16 @@ Clear        | Crystal Clear   | 160 260 360              | #e3ecf1
   const isLowSupply = it => lowReasons(it).length > 0;
   // The one matching reason, or '' when several match (then it's just "Low").
   const lowNote = it => { const r = lowReasons(it); return r.length === 1 ? r[0] : ''; };
+  // Reorder: ready rolls + rolls the bags could make add up to LOW_ROLLS (2) or fewer.
+  // Roll these: no ready rolls, but the bags can still make 3 or more.
+  const orderNote = it => {
+    const r = Number(it.rolls) || 0, cm = canMake(it), total = r + cm;
+    if (total === 0) return 'out of rolls and bags';
+    return cm ? `${total} ${unitWord(it, total)} left (${r} ready + ${cm} from bags)` : `${total} ${unitWord(it, total)} left`;
+  };
   const alertKind = it => {
-    if (isOut(it)) return canMake(it) >= 1 ? 'make' : 'order'; // out of rolls
-    if (isLowSupply(it)) return 'low';                         // see lowReasons()
+    if (isLowSupply(it) || (isOut(it) && canMake(it) < 1)) return 'order';
+    if (isOut(it)) return 'make';
     return null;
   };
 
@@ -438,9 +445,8 @@ Clear        | Crystal Clear   | 160 260 360              | #e3ecf1
     if (!items.length) { el.innerHTML = ''; return; }
     const make = items.filter(i => alertKind(i) === 'make');
     const order = items.filter(i => alertKind(i) === 'order');
-    const low = items.filter(i => alertKind(i) === 'low');
-    if (!make.length && !order.length && !low.length) { el.innerHTML = `<div class="alert-ok">Supplies look good. Every balloon has ready rolls in storage.</div>`; return; }
-    const chip = i => `<button class="chip" data-open="${esc(i.id)}">${swatch(i)}${esc(label(i))}${alertKind(i) === 'low' && lowNote(i) ? `<span class="why">${esc(lowNote(i))}</span>` : ''}</button>`;
+    if (!make.length && !order.length) { el.innerHTML = `<div class="alert-ok">Supplies look good. Every balloon has ready rolls in storage.</div>`; return; }
+    const chip = i => `<button class="chip" data-open="${esc(i.id)}">${swatch(i)}${esc(label(i))}${alertKind(i) === 'order' ? `<span class="why">${esc(orderNote(i))}</span>` : ''}</button>`;
     // Each box is collapsible; tap its title bar. Open/closed is remembered on this device.
     const box = (kind, title, arr, hint) => !arr.length ? '' : `
       <details class="alert ${kind}" data-alert="${kind}" ${alertOpen[kind] === false ? '' : 'open'}>
@@ -449,8 +455,7 @@ Clear        | Crystal Clear   | 160 260 360              | #e3ecf1
       </details>`;
     el.innerHTML =
       box('make', 'Roll these', make, 'Out of ready rolls, but you have bags to make more.') +
-      box('order', 'Reorder', order, 'Out of rolls and out of bags.') +
-      box('low', 'Low supplies', low, '');
+      box('order', 'Reorder', order, `${LOW_ROLLS} rolls or fewer, counting ready rolls and rolls you could make from bags.`);
   }
 
   function filtered() {
@@ -648,7 +653,7 @@ Clear        | Crystal Clear   | 160 260 360              | #e3ecf1
     const k = alertKind(it);
     openSheet(`
       <div class="sheet-h">${swatch(it)}<h3>${esc(label(it))}</h3><button class="x" id="closeX" aria-label="Close">×</button></div>
-      ${k === 'make' ? `<p class="hint warn">Out of ready ${U}. You have bags to make ${cm} more.</p>` : k === 'order' ? `<p class="hint bad">Out of ${U} and out of bags. Time to reorder${it.source ? ' from ' + esc(it.source) : ''}.</p>` : k === 'low' ? `<p class="hint low">Low inventory${lowNote(it) ? ': ' + esc(lowNote(it)) : ''}.</p>` : ''}
+      ${k === 'make' ? `<p class="hint warn">Out of ready ${U}. You have bags to make ${cm} more.</p>` : k === 'order' ? `<p class="hint bad">Reorder: ${esc(orderNote(it))}${it.source ? '. Order from ' + esc(it.source) : ''}.</p>` : k === 'low' ? `<p class="hint low">Low inventory${lowNote(it) ? ': ' + esc(lowNote(it)) : ''}.</p>` : ''}
       <div class="counts">
         <div><span class="n">${r}</span><span class="l">${U} ready</span></div>
         <div><span class="n">${fmtBags(b)}</span><span class="l">bags</span><span class="sub">can make ${cm}</span></div>
@@ -1001,8 +1006,8 @@ Clear        | Crystal Clear   | 160 260 360              | #e3ecf1
     }
     try { localStorage.setItem('balloon-inventory-notified', JSON.stringify(now)); } catch (e) {}
     if (!fresh.length || !canNotify()) return;
-    const msg = { low: 'Low inventory', make: 'Out of rolls, bags ready to roll', order: 'Out of rolls and bags. Reorder' };
-    const body = fresh.slice(0, 5).map(([it, k]) => `${label(it)}: ${k === 'low' ? (lowNote(it) ? 'Low, ' + lowNote(it) : 'Low inventory') : msg[k]}`).join('\n') + (fresh.length > 5 ? `\n+${fresh.length - 5} more` : '');
+    const msg = { make: 'Out of ready rolls, bags ready to roll', order: 'Reorder' };
+    const body = fresh.slice(0, 5).map(([it, k]) => `${label(it)}: ${k === 'order' ? 'Reorder, ' + orderNote(it) : msg[k]}`).join('\n') + (fresh.length > 5 ? `\n+${fresh.length - 5} more` : '');
     const title = fresh.length === 1 ? 'Balloon supplies' : `${fresh.length} balloons need attention`;
     const opts = { body, tag: 'balloon-inventory', icon: 'icon-192.png', badge: 'icon-192.png' };
     // Phones only allow notifications through the service worker; computers also accept the simple way.
