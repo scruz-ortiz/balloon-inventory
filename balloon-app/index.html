@@ -960,6 +960,18 @@ Clear        | Crystal Clear   | 160 260 360              | #e3ecf1
     checkNotifications();
   });
 
+  // One-time fix: Sempertex balloons saved without a supplier get Fun Services.
+  // Balloons that already have a supplier are left alone.
+  (async () => {
+    let done = false;
+    try { done = localStorage.getItem('bri-sx-supplier') === '1'; } catch (e) {}
+    if (done) return;
+    const fix = items.filter(i => String(i.brand || '').toLowerCase() === 'sempertex' && !String(i.source || '').trim());
+    for (const it of fix) { try { await db.collection('balloons').doc(it.id).update({ source: DEFAULT_SUPPLIER }); } catch (e) {} }
+    try { localStorage.setItem('bri-sx-supplier', '1'); } catch (e) {}
+    if (fix.length) toast(`Set ${fix.length} Sempertex balloon${fix.length === 1 ? '' : 's'} to ${DEFAULT_SUPPLIER}`);
+  })();
+
   // ---------- device notifications ----------
   // Sends one notification when a balloon first becomes low, needs rolling, or needs reordering.
   // It won't repeat for that balloon until it's restocked and drops again.
