@@ -1,7 +1,7 @@
 // Balloon Roll Inventory service worker.
 // Lets phones show notifications and keeps the app working offline.
 // When you upload a new index.html, bump VERSION so phones pick up the change.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
