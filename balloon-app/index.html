@@ -59,10 +59,20 @@ header.top p{margin:6px 0 0;color:var(--muted);font-size:14px}
 
 /* alerts */
 .alerts{display:flex;flex-direction:column;gap:8px}
-.alert{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:12px;border:1px solid}
+.alert{display:block;padding:0;border-radius:12px;border:1px solid}
+.alert summary{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;list-style:none;min-width:0}
+.alert summary::-webkit-details-marker{display:none}
+.alert summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:12px}
+.alert .alert-count{font-family:var(--display);font-weight:700;font-size:14px;color:var(--ink)}
+.alert .alert-peek{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;color:var(--muted);visibility:hidden}
+.alert:not([open]) .alert-peek{visibility:visible}
+.alert .chev{flex:none;width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin:-4px 4px 0 auto;transition:transform .15s}
+.alert[open] .chev{transform:rotate(-135deg);margin-top:4px}
+.alert-body{padding:0 14px 12px;display:flex;flex-direction:column;gap:8px}
+.alert-body .hint{margin:0}
 .alert.make{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
 .alert.order{background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
-.alert .tag{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;padding-top:2px}
+.alert .tag{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
 .alert.make .tag{color:var(--warn)} .alert.order .tag{color:var(--bad)}
 .alert .items{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
 .alert .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px 3px 6px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
@@ -273,7 +283,13 @@ textarea{min-height:140px;font-family:ui-monospace,Menlo,Consolas,monospace;font
     return String(raw || '').trim();
   };
   // Finishes: the balloon line or color family. Standard is the default and is left out of names.
-  const FINISHES = ['Standard', 'Deluxe', 'Fashion', 'Pastel Matte', 'Pastel Dusk', 'Metallic', 'Reflex', 'Neon', 'Pearl', 'Silk'];
+  const FINISHES = ['Standard', 'Deluxe', 'Fashion', 'Pastel Matte', 'Pastel Dusk', 'Metallic', 'Reflex', 'Neon', 'Pearl', 'Silk', 'Clear'];
+
+  // Capitalizes the first letter of each word ("royal blue" -> "Royal Blue"). Other letters stay as typed.
+  const titleCase = str => String(str || '').trim().replace(/(^|[\s\-\/(])([a-z])/g, (m, pre, ch) => pre + ch.toUpperCase());
+
+  // New balloons start with this supplier; you can change it on each one.
+  const DEFAULT_SUPPLIER = 'Fun Services';
 
   // ---------- Sempertex preset list ----------
   // From Sempertex_Stock.pdf. One color per line:  finish | color | sizes it comes in | swatch color
@@ -326,6 +342,11 @@ Pastel Matte | Lilac           | 5in 11in 260             | #d7c6ea
 Pastel Matte | Malibu Peach    | 5in 11in 260             | #f8cbb0
 Pastel Matte | Nude            | 5in 11in 160 260 360     | #e8cdb8
 Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
+Metallic     | Blue            | 260                      | #2f5fa8
+Metallic     | Purple          | 260                      | #6b3fa0
+Metallic     | Silver          | 260                      | #c0c0c8
+Metallic     | Gold            | 260                      | #c9a227
+Clear        | Crystal Clear   | 160 260 360              | #e3ecf1
 `;
   const SEMPERTEX = [];
   SEMPERTEX_LIST.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).forEach(l => {
@@ -342,18 +363,14 @@ Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
   const swatch = it => `<span class="sw ${isRound(it) ? 'round' : 'twist'} ${sizeClass(it)}" style="--c:${esc(it.colorHex || guessHex(it.color))}" aria-hidden="true"></span>`;
 
   // ---------- alert rules ----------
-  // Low inventory warning when ANY of these is true:
-  //   - bags on hand are LOW_BAGS or fewer
-  //   - ready rolls in storage are LOW_ROLLS or fewer (2 rolls is low, 4 is in stock)
-  //   - rolls packed in the event bag are equal to or more than the rolls left in storage
+  // Low inventory warning: total rolls are LOW_ROLLS or fewer,
+  // counting ready rolls in storage plus rolls the bags could still make.
   const LOW_ROLLS = 2;
-  const LOW_BAGS = 1;
+  const LOW_BAGS = 1; // used by the To order list, not the low warning
   const isOut = it => (Number(it.rolls) || 0) <= (Number(it.minRolls) || 0);
   const lowReasons = it => {
-    const r = Number(it.rolls) || 0, b = Number(it.bags) || 0, g = Number(it.bagged) || 0, out = [];
-    if (b <= LOW_BAGS) out.push(b === 0 ? 'no bags left' : `only ${fmtBags(b)} bag${b === 1 ? '' : 's'} left`);
-    if (r <= LOW_ROLLS) out.push(`only ${r} ${unitWord(it, r)} in storage`);
-    if (g > 0 && g >= r) out.push(`${g} in the event bag vs ${r} in storage`);
+    const r = Number(it.rolls) || 0, total = r + canMake(it), out = [];
+    if (total <= LOW_ROLLS) out.push(total === r ? `only ${r} ${unitWord(it, r)} left` : `only ${total} ${unitWord(it, total)} left (${r} ready + ${canMake(it)} from bags)`);
     return out;
   };
   const isLowSupply = it => lowReasons(it).length > 0;
@@ -407,6 +424,14 @@ Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
     else renderLibrary();
   }
 
+  let alertOpen = {};
+  try { alertOpen = JSON.parse(localStorage.getItem('bri-alerts') || '{}'); } catch (e) {}
+  document.addEventListener('toggle', e => {
+    const k = e.target.dataset && e.target.dataset.alert; if (!k) return;
+    alertOpen[k] = e.target.open;
+    try { localStorage.setItem('bri-alerts', JSON.stringify(alertOpen)); } catch (err) {}
+  }, true);
+
   function renderAlerts() {
     const el = $('#alerts');
     if (!ready) { el.innerHTML = ''; return; }
@@ -415,11 +440,17 @@ Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
     const order = items.filter(i => alertKind(i) === 'order');
     const low = items.filter(i => alertKind(i) === 'low');
     if (!make.length && !order.length && !low.length) { el.innerHTML = `<div class="alert-ok">Supplies look good. Every balloon has ready rolls in storage.</div>`; return; }
-    const chips = arr => arr.map(i => `<button class="chip" data-open="${esc(i.id)}">${swatch(i)}${esc(label(i))}</button>`).join('');
+    const chip = i => `<button class="chip" data-open="${esc(i.id)}">${swatch(i)}${esc(label(i))}${alertKind(i) === 'low' && lowNote(i) ? `<span class="why">${esc(lowNote(i))}</span>` : ''}</button>`;
+    // Each box is collapsible; tap its title bar. Open/closed is remembered on this device.
+    const box = (kind, title, arr, hint) => !arr.length ? '' : `
+      <details class="alert ${kind}" data-alert="${kind}" ${alertOpen[kind] === false ? '' : 'open'}>
+        <summary><span class="tag">${title}</span><span class="alert-count">${arr.length}</span><span class="alert-peek">${esc(arr.map(label).join(', '))}</span><span class="chev" aria-hidden="true"></span></summary>
+        <div class="alert-body"><div class="items">${arr.map(chip).join('')}</div>${hint ? `<p class="hint">${hint}</p>` : ''}</div>
+      </details>`;
     el.innerHTML =
-      (make.length ? `<div class="alert make"><span class="tag">Roll these</span><div><div class="items">${chips(make)}</div><p class="hint" style="margin-top:6px">Out of ready rolls, but you have bags to make more.</p></div></div>` : '') +
-      (order.length ? `<div class="alert order"><span class="tag">Reorder</span><div><div class="items">${chips(order)}</div><p class="hint" style="margin-top:6px">Out of rolls and out of bags.</p></div></div>` : '') +
-      (low.length ? `<div class="alert low"><span class="tag">Low supplies</span><div><div class="items">${low.map(i => `<button class="chip" data-open="${esc(i.id)}">${swatch(i)}${esc(label(i))}${lowNote(i) ? `<span class="why">${esc(lowNote(i))}</span>` : ''}</button>`).join('')}</div></div></div>` : '');
+      box('make', 'Roll these', make, 'Out of ready rolls, but you have bags to make more.') +
+      box('order', 'Reorder', order, 'Out of rolls and out of bags.') +
+      box('low', 'Low supplies', low, '');
   }
 
   function filtered() {
@@ -675,7 +706,7 @@ Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
       <div class="panel">
         <form class="fields" id="sxForm">
           <label>Section<select id="sxCat"><option value="auto">Match size (rounds in Decor)</option><option value="twist">All in Twisting</option><option value="decor">All in Decor</option></select></label>
-          <label>Where you order it (optional)<input id="sxSource" placeholder="Supplier or store"></label>
+          <label>Where you order it (optional)<input id="sxSource" value="${esc(DEFAULT_SUPPLIER)}" placeholder="Supplier or store"></label>
         </form>
       </div>
       <div class="sticky-actions"><button class="btn primary" type="button" id="sxAdd" disabled>Choose balloons to add</button><button class="btn ghost" type="button" id="sxBack">Back</button></div>`);
@@ -708,7 +739,7 @@ Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
     $('#sxAdd').addEventListener('click', async () => {
       const chosen = SEMPERTEX.filter(p => sx.picked.has(p.key));
       if (!chosen.length) return;
-      const catMode = $('#sxCat').value, source = $('#sxSource').value.trim();
+      const catMode = $('#sxCat').value, source = titleCase($('#sxSource').value);
       $('#sxAdd').disabled = true;
       let done = 0;
       for (const p of chosen) {
@@ -727,7 +758,7 @@ Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
 
   function openEditor(id) {
     const it = id ? items.find(i => i.id === id) : null;
-    const v = it || { category: ui.cat === 'decor' ? 'decor' : 'twist', size: '', color: '', perBag: 100, perUnit: 50, brand: '', source: '', notes: '' };
+    const v = it || { category: ui.cat === 'decor' ? 'decor' : 'twist', size: '', color: '', perBag: 100, perUnit: 50, brand: '', source: DEFAULT_SUPPLIER, notes: '' };
     const hex = v.colorHex || guessHex(v.color);
     openSheet(`
       <div class="sheet-h"><h3>${it ? 'Edit balloon' : 'Add a balloon'}</h3><button class="x" id="closeX" aria-label="Close">×</button></div>
@@ -769,8 +800,8 @@ Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
     $('#editForm').addEventListener('submit', async e => {
       e.preventDefault();
       if (!db) { toast('Saving is unavailable.'); return; }
-      const body = { category: $('#fCat').value, size: $('#fSize').value.trim(), color: $('#fColor').value.trim(), finish: $('#fFinish').value.trim(), colorHex: $('#fHex').value,
-        perBag: +$('#fPerBag').value, perUnit: +$('#fPerUnit').value, brand: $('#fBrand').value.trim(), source: $('#fSource').value.trim(), notes: $('#fNotes').value.trim() };
+      const body = { category: $('#fCat').value, size: $('#fSize').value.trim(), color: titleCase($('#fColor').value), finish: titleCase($('#fFinish').value), colorHex: $('#fHex').value,
+        perBag: +$('#fPerBag').value, perUnit: +$('#fPerUnit').value, brand: $('#fBrand').value.trim(), source: titleCase($('#fSource').value), notes: $('#fNotes').value.trim() };
       try {
         if (it) { await db.collection('balloons').doc(it.id).update({ ...body, example: false }); toast('Saved ' + label(body)); openDetail(it.id); }
         else { await db.collection('balloons').add({ ...body, rolls: Math.max(0, Math.floor(+$('#fStartRolls').value || 0)), bags: Math.max(0, round3(+$('#fStartBags').value || 0)), bagged: 0, minRolls: 0, createdAt: new Date().toISOString() }); toast('Added ' + label(body)); closeSheet(); }
@@ -823,7 +854,7 @@ Pastel Matte | Melon           | 5in 11in 260             | #f6b39a
       const finish = c[3] ? (FINISHES.find(f => f.toLowerCase() === c[3].toLowerCase()) || c[3]) : '';
       const pb = parseInt(c[4], 10);
       if (!cat || !c[1] || !c[2] || !(pb > 0)) { bad.push(idx + 1); return; }
-      rows.push({ category: cat, size: normSize(c[1]), color: c[2], finish, colorHex: guessHex(c[2]), perBag: pb, brand: c[5] || '', source: c[6] || '', perUnit: parseInt(c[7], 10) || 50,
+      rows.push({ category: cat, size: normSize(c[1]), color: titleCase(c[2]), finish: titleCase(finish), colorHex: guessHex(c[2]), perBag: pb, brand: c[5] || '', source: titleCase(c[6]) || DEFAULT_SUPPLIER, perUnit: parseInt(c[7], 10) || 50,
         notes: '', rolls: 0, bags: 0, bagged: 0, minRolls: 0, createdAt: new Date().toISOString() });
     });
     if (!rows.length) { $('#importMsg').textContent = bad.length ? `Couldn't read line${bad.length>1?'s':''} ${bad.join(', ')}. Check the column order.` : 'Paste at least one line first.'; return; }
